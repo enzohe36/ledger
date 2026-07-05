@@ -5,13 +5,13 @@ Arguments (each in yyyymm form):
     (none)          the 12-month period ending in the month before the current month
     <start> <end>   from <start> month through <end> month (inclusive)
 
-For the selected span it reports, all converted to USD:
-    * income/expense per category, annualised (value / months * 12), excluding
-      entries that carry a project or a tag, and excluding the double-entry
-      Transfer/Borrowing/Lending categories,
-    * income/expense per project (period sum, not annualised),
-    * income/expense per tag (period sum, not annualised).
-Items whose value rounds to zero are omitted.
+For the selected span it reports, all converted to USD and annualised
+(value / months * 12):
+    * income/expense per category, excluding entries that carry a project or a
+      tag, and excluding the double-entry Transfer/Borrowing/Lending categories,
+    * income/expense per project,
+    * income/expense per tag,
+    * the full list of categories.
 Both expense and income are reported as positive figures.
 
 Output:  ledgers/budget_<startYYYYMM>_<endYYYYMM>.csv  (endYYYYMM = the actual
@@ -128,27 +128,21 @@ def main(argv):
     cat_mask = ((df["Project"] == "") & (df["Tag"] == "") &
                 (~df["Category"].isin(lu.DOUBLE_ENTRY_CATEGORIES)))
     cat_net = df[cat_mask].groupby("Category")["expense_usd"].sum()
-    for cat in legend_categories():
+    for cat in legend_categories():  # list every category, even at 0
         annual = annualise(cat_net.get(cat, 0.0), months)
         if cat in lu.INCOME_CATEGORIES:
             annual = -annual  # report income as a positive budget figure
-        annual = round(annual, 2)
-        if annual != 0.0:  # omit zero-value items
-            rows.append(("category", cat, annual))
+        rows.append(("category", cat, round(annual, 2)))
 
-    # --- Projects: period sum, not annualised ---
+    # --- Projects: annualised period sum ---
     proj = df[df["Project"] != ""]
     for name, net in proj.groupby("Project")["expense_usd"].sum().items():
-        net = round(net, 2)
-        if net != 0.0:
-            rows.append(("project", name, net))
+        rows.append(("project", name, round(annualise(net, months), 2)))
 
-    # --- Tags: period sum, not annualised ---
+    # --- Tags: annualised period sum ---
     tag = df[df["Tag"] != ""]
     for name, net in tag.groupby("Tag")["expense_usd"].sum().items():
-        net = round(net, 2)
-        if net != 0.0:
-            rows.append(("tag", name, net))
+        rows.append(("tag", name, round(annualise(net, months), 2)))
 
     out = pd.DataFrame(rows, columns=["Type", "Name", "Annual"])
     out.insert(2, "Currency", "USD")
@@ -159,7 +153,7 @@ def main(argv):
 
     # Console summary
     print(f"Analysed {ym_str(start_ym)}..{ym_str(end_ym)} ({months} months), "
-          f"{len(df)} entries, USD. Categories annualised; projects/tags summed.")
+          f"{len(df)} entries, USD. All items annualised.")
     print(f"Wrote ledgers/{fname}\n")
     for typ in ("category", "project", "tag"):
         sub = [r for r in rows if r[0] == typ]

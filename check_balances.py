@@ -5,16 +5,17 @@ For every ledgers/<year>.csv it writes ledgers/<year>_balances.csv holding the
 running balances *through the end of that year* (balances accumulate from the
 lowest year to the highest):
 
-  * every account whose balance is non-zero, and
-  * every project that has appeared,
+  * every account and project, including those at a zero balance, and
+  * any double-entry category with a non-zero (anomalous) balance,
 
 with one line per currency.  A positive balance (Debit > Credit) is shown in the
-Debit column, a negative one in the Credit column.
+Debit column, a negative one in the Credit column.  A zero-balance item appears
+in the year it reaches zero but is not carried forward to later years.
 
-Before writing, it lists every changed balance (USD is the default currency and
-shown without a label; other currencies are labelled) and any entries carrying
-both a project and a tag, then asks for a single confirmation.  Byte-identical
-files are left untouched.
+One file at a time, it lists that year's changed balances (USD is the default
+currency and shown without a label; other currencies are labelled) and any
+entries carrying both a project and a tag, then asks whether to write that file.
+Byte-identical files are left untouched.
 
 Usage:  python3 check_balances.py
 """
@@ -52,13 +53,10 @@ def build_rows(year, accounts, projects, categories):
         rows.append(row)
 
     for (name, cur), net in accounts.items():
-        net = round(net, 2)
-        if abs(net) < EPS:
-            continue  # accounts: only the non-zero ones
-        emit(net, Currency=cur, Account=name)
+        emit(round(net, 2), Currency=cur, Account=name)  # every account, incl. zero
 
     for (name, cur), net in projects.items():
-        emit(round(net, 2), Currency=cur, Project=name)  # projects: all of them
+        emit(round(net, 2), Currency=cur, Project=name)  # every project, incl. zero
 
     for (name, cur), net in categories.items():
         net = round(net, 2)
@@ -70,6 +68,14 @@ def build_rows(year, accounts, projects, categories):
     # Generalized ordering: prioritise by column order, then alphabetically.
     rows.sort(key=lambda r: [r[c] for c in lu.COLUMNS])
     return rows
+
+
+def prune_zero(*balances):
+    """Drop (rounded) zero-balance entries so they are not carried into a later
+    year -- an item still appears in the year it reaches zero, then disappears."""
+    for m in balances:
+        for key in [k for k, v in m.items() if abs(round(v, 2)) < EPS]:
+            del m[key]
 
 
 def render_csv(rows):
@@ -127,10 +133,6 @@ def main():
     projects = defaultdict(float)
     categories = defaultdict(float)  # double-entry categories only
 
-    pending = []          # (out_path, new_text) for files that need writing
-    changed = {}          # (name, currency) -> True, unioned across all files
-    double_dates = []     # dates of entries carrying both a project and a tag
-
     for year, path in files:  # ascending -> balances accumulate low->high
         df = lu.read_ledger(path)
         for _, r in df.iterrows():
@@ -142,45 +144,48 @@ def main():
                 categories[(r["Category"], r["Currency"])] += net
 
         both = df[(df["Project"] != "") & (df["Tag"] != "")]
-        double_dates.extend(both["date"].dt.strftime("%Y-%m-%d").tolist())
+        dc_dates = sorted(both["date"].dt.strftime("%Y-%m-%d").tolist())
 
         rows = build_rows(year, accounts, projects, categories)
         new_text = render_csv(rows)
+        # Zero-balance items are written for this year but not carried forward.
+        prune_zero(accounts, projects, categories)
+
         out_path = os.path.join(lu.LEDGER_DIR, f"{year}_balances.csv")
+        name = os.path.basename(out_path)
 
         old_text = ""
         if os.path.exists(out_path):
             with open(out_path, "r", encoding="utf-8") as fh:
                 old_text = fh.read()
-            if old_text == new_text:
-                continue  # up to date, nothing to write
-        for key in changed_entries(old_text, new_text):
-            changed[key] = True
-        pending.append((out_path, new_text))
+        if old_text == new_text:
+            print(f"{name}: up to date.")
+            continue
 
-    # --- Present every warning before writing anything ---
-    if changed:
-        items = sorted(changed, key=lambda kc: (kc[0], kc[1] != "USD", kc[1]))
-        print("Balance changes: " + ", ".join(fmt_item(n, c) for n, c in items))
-    if double_dates:
-        print("Double-counted entries: " + ", ".join(sorted(set(double_dates))))
+        # Report this file's changes, then confirm just this one.
+        print(f"\n{name}")
+        changed = changed_entries(old_text, new_text)
+        if changed:
+            items = sorted(changed, key=lambda kc: (kc[0], kc[1] != "USD", kc[1]))
+            print("  Balance changes: " + ", ".join(fmt_item(n, c) for n, c in items))
+        elif old_text:
+            print("  Differs in row order only.")
+        else:
+            print("  New file.")
+        if dc_dates:
+            print("  Double-counted entries: " + ", ".join(dc_dates))
 
-    if not pending:
-        print("All balance files are up to date.")
-        return 0
+        try:
+            ans = input(f"  Write {name}? [y/N] ").strip().lower()
+        except EOFError:
+            ans = ""
+        if ans in ("y", "yes"):
+            with open(out_path, "w", encoding="utf-8") as fh:
+                fh.write(new_text)
+            print(f"  {name}: written.")
+        else:
+            print(f"  {name}: skipped.")
 
-    try:
-        ans = input(f"Write {len(pending)} balance file(s)? [y/N] ").strip().lower()
-    except EOFError:
-        ans = ""
-    if ans not in ("y", "yes"):
-        print("No files written.")
-        return 0
-
-    for out_path, new_text in pending:
-        with open(out_path, "w", encoding="utf-8") as fh:
-            fh.write(new_text)
-        print(f"{os.path.basename(out_path)}: written.")
     return 0
 
 
