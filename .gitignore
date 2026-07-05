@@ -3,6 +3,7 @@
 __pycache__/
 ledgers/
 currencies/
+temp/
 
 temp*
 refs*

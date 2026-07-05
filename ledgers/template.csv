@@ -1,0 +1,15 @@
+﻿Date,Currency,Account,Category,Project,Tag,Debit,Credit,Description
+,,,Apparel,,,,,"Clothes, shoes, backpacks, jewelries, framed glasses. "
+,,,Borrowing,,,,,(DOUBLE-ENTRY) Money borrowed from/ paid to others. 
+,,,Education,,,,,"Tuition, books, stationaries, testing fees. "
+,,,Entertainment,,,,,"Movies, games, admission tickets, recreational hotel stays. "
+,,,Equipment,,,,,"Electronics, special equipment and parts w/ unit price >= $200 or ¥1000. "
+,,,Food,,,,,"Groceries, dine-out. "
+,,,Healthcare,,,,,"Medicine, hospital visits, health insurance, contact lenses."
+,,,Housing,,,,,"Rent, renters insurance, utilities, hotel stays for housing. "
+,,,Investment,,,,,Capital gains/losses. 
+,,,Lending,,,,,(DOUBLE-ENTRY) Money lent to/ received from others. 
+,,,Miscellaneous,,,,,Other daily expenses. 
+,,,Salary,,,,,Employment income. 
+,,,Transfer,,,,,(DOUBLE-ENTRY) Money transferred between own accounts. 
+,,,Transportation,,,,,"Taxi, train rides, flights, car maintenance, car insurance, gas. "

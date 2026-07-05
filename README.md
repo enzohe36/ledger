@@ -64,11 +64,11 @@ that carry a project or tag, and the double-entry `Transfer`/`Borrowing`/
 category. Output: `ledgers/budget_<startYYYYMM>_<endYYYYMM>.csv`, where the end
 month is the actual last month analysed.
 
-### `check_budge.py`
+### `check_budget.py`
 Compares the highest-year ledger against a budget produced by `make_budget.py`.
 
 ```
-python3 check_budge.py ledgers/budget_202501_202510.csv
+python3 check_budget.py ledgers/budget_202501_202510.csv
 ```
 
 * **Categories** — actual total vs the budget *prorated* to the months elapsed

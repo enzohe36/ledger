@@ -37,6 +37,11 @@ COLUMNS = ["Date", "Currency", "Account", "Category", "Project", "Tag",
 # budget income/expense (they net to ~zero and are not real P&L).
 DOUBLE_ENTRY_CATEGORIES = {"Transfer", "Borrowing", "Lending"}
 
+# Income categories (money in).  Everything else that is not double-entry is an
+# expense category.  Income is reported as a positive figure (Debit - Credit),
+# expense as a positive figure (Credit - Debit).
+INCOME_CATEGORIES = {"Salary", "Investment"}
+
 FRANKFURTER_URL = "https://api.frankfurter.dev/v1/{start}..{end}"
 
 

@@ -2,7 +2,7 @@
 """make_budget.py -- derive an annualised budget from past ledger activity.
 
 Arguments (each in yyyymm form):
-    (none)          the 12-month period ending in the last complete month
+    (none)          the 12-month period ending in the month before the current month
     <start> <end>   from <start> month through <end> month (inclusive)
 
 For the selected span it reports, all converted to USD:
@@ -10,9 +10,9 @@ For the selected span it reports, all converted to USD:
       entries that carry a project or a tag, and excluding the double-entry
       Transfer/Borrowing/Lending categories,
     * income/expense per project (period sum, not annualised),
-    * income/expense per tag (period sum, not annualised),
-    * the full list of categories.
-Expense is positive, income negative.
+    * income/expense per tag (period sum, not annualised).
+Items whose value rounds to zero are omitted.
+Both expense and income are reported as positive figures.
 
 Output:  ledgers/budget_<startYYYYMM>_<endYYYYMM>.csv  (endYYYYMM = the actual
 last month analysed).
@@ -79,18 +79,17 @@ def legend_categories():
     return cats
 
 
-def last_complete_month(all_entries):
-    """The most recent fully-elapsed month covered by the data."""
-    last = all_entries["date"].max()
-    last_ym = (last.year, last.month)
-    return last_ym if last >= month_last(last_ym) else prev_month(last_ym)
+def current_month():
+    """The current calendar month as a (year, month) pair."""
+    now = pd.Timestamp.now()
+    return (now.year, now.month)
 
 
 def resolve_range(args, all_entries):
     """Return (start_ym, end_ym) for analysis."""
     if len(args) == 0:
-        # 12-month period ending in the last complete month.
-        end_ym = last_complete_month(all_entries)
+        # 12-month period ending in the month before the current month.
+        end_ym = prev_month(current_month())
         start_ym = add_months(end_ym, -11)
     else:
         start_ym, end_ym = parse_ym(args[0]), parse_ym(args[1])
@@ -129,19 +128,27 @@ def main(argv):
     cat_mask = ((df["Project"] == "") & (df["Tag"] == "") &
                 (~df["Category"].isin(lu.DOUBLE_ENTRY_CATEGORIES)))
     cat_net = df[cat_mask].groupby("Category")["expense_usd"].sum()
-    for cat in legend_categories():  # list every category, even at 0
+    for cat in legend_categories():
         annual = annualise(cat_net.get(cat, 0.0), months)
-        rows.append(("category", cat, round(annual, 2)))
+        if cat in lu.INCOME_CATEGORIES:
+            annual = -annual  # report income as a positive budget figure
+        annual = round(annual, 2)
+        if annual != 0.0:  # omit zero-value items
+            rows.append(("category", cat, annual))
 
     # --- Projects: period sum, not annualised ---
     proj = df[df["Project"] != ""]
     for name, net in proj.groupby("Project")["expense_usd"].sum().items():
-        rows.append(("project", name, round(net, 2)))
+        net = round(net, 2)
+        if net != 0.0:
+            rows.append(("project", name, net))
 
     # --- Tags: period sum, not annualised ---
     tag = df[df["Tag"] != ""]
     for name, net in tag.groupby("Tag")["expense_usd"].sum().items():
-        rows.append(("tag", name, round(net, 2)))
+        net = round(net, 2)
+        if net != 0.0:
+            rows.append(("tag", name, net))
 
     out = pd.DataFrame(rows, columns=["Type", "Name", "Annual"])
     out.insert(2, "Currency", "USD")
@@ -160,7 +167,7 @@ def main(argv):
             continue
         print(f"[{typ}]")
         for _, name, amt in sorted(sub, key=lambda r: -abs(r[2])):
-            kind = "expense" if amt >= 0 else "income "
+            kind = "income " if (typ == "category" and name in lu.INCOME_CATEGORIES) else "expense"
             print(f"  {kind} {amt:>12,.2f}  {name}")
         print()
     return 0
